@@ -71,7 +71,7 @@ section is a four-row table. There are no consensus rules in pseudocode, no defi
 "legacy script", no reference implementation, and no `Security Considerations` section. Its
 `Backward Compatibility` section discusses non-upgraded nodes and wallets only.
 
-## 1a. Prior art, and why I believe this is a gap
+### 1.1 Prior art, and why I believe this is a gap
 
 I went looking for this argument before making it, and report what I found so it can be
 checked:
@@ -138,10 +138,33 @@ regardless of output type**:
 - **Simple taproot channel (P2TR funding output).** The tweaked aggregate key is the
   `scriptPubKey`; it is exposed on-chain at rest, gossip or not.
 
-So no output-type migration — P2MR, P2TRv2, or otherwise — removes the exposure of an
-announced channel, and any rescue predicate resting on pubkey secrecy is unavailable to it.
-This directly limits the layered hashed-address recovery proposals whose stated security
-assumption is "keep your public key/internal script paths secret".
+Which of these two cases dominates is measurable, and the answer surprised me. Resolving the
+funding output of a deterministic 300-channel sample (every 67th channel ordered by funding
+height, so recent channels are included) through `short_channel_id` → block → transaction:
+
+| Funding output type | Channels | Capacity |
+|---|---|---|
+| `v0_p2wsh` | 300 (100%) | 29.5 BTC (100%) |
+| `v1_p2tr` | 0 | 0 |
+
+Zero taproot funding outputs, zero resolution failures. By the rule of three, that puts simple
+taproot channel adoption in the public graph below roughly 1% at 95% confidence — not zero, but
+small enough that the P2TR branch above is currently hypothetical.
+
+This sharpens the conclusion rather than weakening it. In practice, **essentially every public
+Lightning channel has a hash-protected funding output on-chain and publishes its funding pubkeys
+in cleartext gossip anyway**. The quantum exposure of public Lightning is therefore not inherited
+from the chain at all. It is created at the Lightning layer, by BOLT 7.
+
+That is worth stating plainly because it changes who can fix it. No output-type migration —
+P2MR, P2TRv2, or otherwise — removes the exposure of an announced channel; the pubkeys are
+already public regardless of what the output looks like. But the converse is also true: this
+particular exposure needs **no consensus change to fix**. It is a Lightning specification
+question about what `channel_announcement` must carry.
+
+Either way, any rescue predicate resting on pubkey secrecy is unavailable to an announced
+channel. This directly limits the layered hashed-address recovery proposals whose stated
+security assumption is "keep your public key/internal script paths secret".
 
 Unannounced ("private") channels do not publish gossip and are not subject to A1, though
 they remain subject to A2 and A3.
@@ -445,9 +468,17 @@ Stated as requirements on BIP-361 and on the PQC output type, not as a competing
 - **R5 — Anchor Phase B on measured readiness, not only on a block height.** Publish the
   exposure and L2-readiness metrics that gate the transition, so the flag day is a function
   of observed migration progress rather than a date fixed years earlier.
-- **R6 — BOLT-level work is needed in parallel.** Rescuable channel constructions, and
-  reconsidering whether `channel_announcement` must carry raw funding pubkeys, are Lightning
-  spec questions that cannot be solved at the consensus layer alone.
+- **R6 — Reconsider whether `channel_announcement` must carry raw funding pubkeys.** Given the
+  measurement in §2, this is the single highest-leverage change available, and it needs no
+  consensus change. Today the announcement carries `bitcoin_key_1` and `bitcoin_key_2` so that
+  verifiers can reconstruct the funding `scriptPubKey` and confirm the channel is backed by a
+  real UTXO. That check is what forces the keys into the open. If the proof of UTXO backing
+  could be restructured — for a hash-committed funding output, revealing only what the
+  `scriptPubKey` already shows — then public channels would be no more exposed at rest than any
+  other P2WSH output. I do not have a finished design for this and would like to know whether
+  one is possible; it is the question I would most like Lightning implementers to weigh in on.
+  Rescuable channel constructions are the other half, and both are BOLT-layer work that no
+  consensus proposal can do on their behalf.
 
 ## 8. Reproducibility
 
