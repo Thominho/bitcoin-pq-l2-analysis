@@ -53,6 +53,58 @@ makes Phase B non-confiscatory. Every rescue mechanism described rests on the sp
 proving knowledge of something a quantum attacker would not have derived — a parent xpriv,
 a script preimage, a commit/reveal secret.
 
+It is worth noting how thin the specification currently is. BIP-361's entire `Specification`
+section is a four-row table. There are no consensus rules in pseudocode, no definition of
+"legacy script", no reference implementation, and no `Security Considerations` section. Its
+`Backward Compatibility` section discusses non-upgraded nodes and wallets only.
+
+## 1a. Prior art, and why I believe this is a gap
+
+I went looking for this argument before making it, and report what I found so it can be
+checked:
+
+- **Neither BIP mentions the problem.** `grep -i -E 'pre-signed|presigned|lightning|vault|
+  channel|htlc|timelock|DLC|layer.2|L2'` over bip-0360.mediawiki and bip-0361.mediawiki
+  returns zero hits in each. I also read BIP-361's 179 lines in full to check for
+  paraphrase; the topic is not addressed indirectly either.
+- **The active output-type thread does not raise it.** Delving 2749, "PQC output type
+  discussion" (2026-07-27 to 2026-08-19), contains no mention of pre-signed transactions,
+  Lightning, HTLCs, vaults, channels, DLCs, Ark or statechains.
+- **The most relevant Lightning work stops short of it.** roasbeef's "Post Quantum
+  Lightning: Layer by Layer" (Delving 2479, 2026-05-05) covers BOLT 11/12 invoice
+  signatures, BOLT 8 transport, BOLT 7 gossip size, BOLT 4 onion size and payment hashes.
+  On channels it says only that "[a] new channel type can mechanically replace OP_CHECKSIG
+  with OP_CHECKPQSIG". Migration of *existing* pre-signed commitment and HTLC transactions,
+  and the interaction with a deadline, are not treated.
+- **The closest existing framing runs the other way.** Delving 2715 (Hal_03, 2026-07-14)
+  asks what post-quantum means for an L2 when settlement happens on a non-PQ L1 — i.e. PQ
+  off-chain against a classical L1. The direction here is the inverse: L1 restricts
+  classical signatures and thereby invalidates off-chain transactions that were *already
+  signed*.
+- **The mailing list archive is empty on it.** A body-only full-text search of the
+  bitcoindev archive for messages containing both "presigned"/"pre-signed" and "quantum"
+  returns exactly one message, and there the two words co-occur by accident — it concerns a
+  scriptPubKey size limit.
+
+What is *not* new is the category of objection. "Pre-signed but unpublished transactions"
+is already an established consideration in Bitcoin consensus review. Andrew Poelstra, on a
+proposal to limit scriptPubKey length:
+
+> There is a risk of confiscation of coins which have pre-signed but unpublished
+> transactions spending them to new outputs with large scriptPubKeys. Due to long-standing
+> standardness rules, and the presence of P2SH (and now P2WSH) for well over a decade, I'm
+> skeptical that any such transactions exist.
+
+Note the shape of the reasoning: the objection is accepted as valid in principle and
+dismissed on the empirical claim that no such transactions exist. Gregory Maxwell's
+"Non-confiscatory Transaction Weight Limit" (Delving 1732) and the scriptPubKey-length
+proposal's deliberate exception (Delving 2150) show the same care being taken elsewhere.
+
+The contribution here is therefore narrow and empirical rather than conceptual: for a
+legacy signature sunset, the empirical claim that saved those earlier proposals is false.
+Pre-signed, unpublished, un-re-signable transactions demonstrably exist, in the millions,
+and they are the sole unilateral exit path for every channel that holds one.
+
 ## 2. A1 — Lightning publishes its funding keys, by mandate
 
 BOLT-7 `channel_announcement` carries the fields `bitcoin_key_1` and `bitcoin_key_2`, and
@@ -99,8 +151,32 @@ A sunset that invalidates classical signatures invalidates these artifacts. This
 expense — it is a liveness failure. The funds do not become costly to move; they become
 immovable except by cooperation with a counterparty who may be gone.
 
+For Lightning this is spelled out in the specification rather than inferred. BOLT 5 on
+unilateral close:
+
+> MUST broadcast the *last commitment transaction*, for which it has a signature, to perform
+> a *unilateral close*.
+
+"for which it has a signature" is the whole problem: the node cannot construct a new
+commitment transaction, only rebroadcast the one it was given. BOLT 3 says the same about
+the HTLC transactions — HTLC-timeout "is the only way that the local node can timeout the
+HTLC, and this branch requires `<remotehtlcsig>`", and HTLC-success likewise "requires
+`<remotehtlcsig>`".
+
+Nor can the destination be quietly redirected to a PQ output. Per BOLT 5, HTLC transactions
+on anchor channels use `SIGHASH_SINGLE|SIGHASH_ANYONECANPAY` for the remote signature — which
+still covers the output — and the commitment transaction is always `SIGHASH_ALL`. The
+`ANYONECANPAY` flag permits adding inputs for fee bumping and nothing more. Changing an
+output's `scriptPubKey` to a post-quantum type therefore requires a fresh signature from the
+counterparty in every case.
+
 **Deleted-key vaults are the sharpest case.** Their entire security model is that the
 signing key was destroyed after pre-signing. There is nobody who *can* re-sign, by design.
+
+**Ark is the mildest.** VTXOs created by boards and refreshes have a 28-day lifetime, and
+those from Lightning receives 1–3 days, both operator-configurable. Short horizons mean the
+pre-signed population turns over quickly, so Ark is far less exposed on this axis than
+Lightning — an honest point against over-generalising the argument.
 
 ## 4. A3 — Nobody can produce the rescue proof alone
 
@@ -213,6 +289,20 @@ The concentration cuts the other way too: 15.4% of nodes hold 88.6% of capacity,
 *value* sits behind live, responsive counterparties. The stranding risk is heavily weighted
 toward the long tail of small channels — which is also the population least able to afford
 an on-chain exit.
+
+**How long do pre-signed commitments sit unused?** This matters directly, because a three-year
+Phase A only strands channels that survive it. Antonelli et al. (arXiv 2605.12759, not peer
+reviewed; 36,170 nodes, 2022-06 to 2024-10) report a median lifetime of 73 days among
+channels that eventually close, with roughly 76% closing inside 180 days. That figure alone
+would suggest the problem is small. The tail is what matters, and the same work finds the
+probability of remaining open "increases sharply with age, reaching 0.93 for channels older
+than a year".
+
+So channel lifetime is strongly bimodal: most channels churn within months, and the ones that
+survive a year largely stop closing at all. It is precisely that surviving population — the
+long-lived, often forgotten channels, disproportionately the ones whose counterparty has
+stopped gossiping — that a multi-year sunset horizon would find still open and still
+depending on a pre-signed commitment transaction.
 
 ### 6.3 Force-close economics
 
