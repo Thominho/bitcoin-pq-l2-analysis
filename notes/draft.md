@@ -170,9 +170,10 @@ not going to dress it up as one. 81.8% of channels have both ends gossiping with
 96.9% of capacity; the healthy core is very healthy. The claim is about an invariant and about a
 long tail, not about an aggregate.
 
-**Funding output types.** A systematic sample ordered by funding height, resolved through
-`short_channel_id` → block → transaction, found `v0_p2wsh` in every case (750 of 750 at the time
-of writing, of a 1,500-channel sample; zero resolution failures). Taproot funding is therefore
+**Funding output types.** A systematic sample of 1,500 channels ordered by funding height,
+resolved through `short_channel_id` → block → transaction, found `v0_p2wsh` in **all 1,500**,
+with zero resolution failures. By the rule of three that bounds taproot funding among announced
+channels below 0.2% at 95% confidence. Taproot funding is therefore
 rare *among announced channels*. It does **not** follow that taproot channels are rare: lnd 0.21
 ships production simple taproot channels behind an explicit `--channel_type=taproot`, and eclair
 0.14 ships them explicitly **without announcements**. The honest reading is that taproot channels
