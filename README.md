@@ -49,3 +49,8 @@ particular is gossip freshness, not reachability.
 Corrections are welcome, especially to the weight derivations that BOLT-3 does not
 specify and to the prior art — if an argument here has already been made
 elsewhere, please point me at it.
+
+## License
+
+MIT. Reuse the scripts, the measurements and the argument freely; a pointer back
+is appreciated but not required.
