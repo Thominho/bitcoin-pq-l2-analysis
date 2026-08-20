@@ -24,6 +24,19 @@ monotonicity forbids the obvious fix**: it is impossible today to create an outp
 unspendable now and becomes spendable under a future soft fork. Therefore the stock of
 un-rescuable long-lived contracts grows monotonically until a PQ opcode ships.
 
+The sharpest consequence is earlier than it first appears. **Phase A, not Phase B, is what
+breaks these contracts** — three years after activation rather than five. Phase A permits only
+sends from legacy scripts *to PQ scripts*, and a pre-signed commitment transaction pays to
+legacy outputs that were fixed when it was signed. It is a legacy-to-legacy spend by
+construction, and Phase A has no rescue protocol to satisfy, because rescue protocols are a
+Phase B concept.
+
+Measured today: 24.3% of open public Lightning channels have already been open longer than
+Phase A's entire window, and 22.7% have a counterparty that has not gossiped in over two weeks
+and so cannot cooperate in a close. The value concentrated there is small — roughly 150 BTC in
+the over-three-years bucket of a 61%-coverage sample — and the argument below does not depend
+on it being large.
+
 I then quantify the blockspace envelope of migration, which bounds any feasible schedule
 independently of the above.
 
@@ -150,6 +163,39 @@ cannot produce a new signature because the signature is not theirs alone to make
 A sunset that invalidates classical signatures invalidates these artifacts. This is not an
 expense — it is a liveness failure. The funds do not become costly to move; they become
 immovable except by cooperation with a counterparty who may be gone.
+
+### 3.1 Phase A breaks them, not Phase B
+
+I initially assumed the damage happens at Phase B, when classical signatures stop verifying.
+It happens two years earlier, at Phase A, and for a different reason.
+
+Phase A's rule is: *"Permitted sends are from legacy scripts to PQ scripts."* Consider what a
+Lightning commitment transaction actually is at that moment. It spends a legacy P2WSH funding
+output, and it pays to `to_local`, `to_remote` and HTLC outputs that are themselves legacy
+scripts. Those outputs were fixed when the transaction was signed and, per §3 above, cannot be
+changed without a fresh signature from the counterparty. Broadcasting it is therefore a send
+from a legacy script **to a legacy script** — exactly what Phase A forbids.
+
+The same holds for DLC contract execution transactions and for pre-signed vault transactions,
+whose destinations were likewise fixed at signing time, and in the vault case by a key that was
+deliberately destroyed.
+
+This matters for three reasons:
+
+1. **It is earlier.** ~160,000 blocks (~3 years) after activation, not five.
+2. **There is no rescue protocol at Phase A.** Rescue protocols are a Phase B construct. Phase A
+   is a plain standardness/validity restriction on where funds may be sent, so there is nothing
+   to satisfy.
+3. **It is invisible in the text.** Neither BIP mentions any of these constructions, so it is
+   genuinely unclear whether this consequence is intended, overlooked, or meant to be handled by
+   an exception that has not been written.
+
+I want to be careful about how strongly to put this. BIP-361's entire `Specification` is a
+four-row table with no consensus rules, no pseudocode and no definition of "legacy script". The
+reading above is the natural one, but the document is not precise enough to make it certain.
+That imprecision is itself the finding: a rule with this consequence should not be ambiguous.
+
+### 3.2 What the Lightning specification says
 
 For Lightning this is spelled out in the specification rather than inferred. BOLT 5 on
 unilateral close:
@@ -304,6 +350,34 @@ long-lived, often forgotten channels, disproportionately the ones whose counterp
 stopped gossiping — that a multi-year sunset horizon would find still open and still
 depending on a pre-signed commitment transaction.
 
+That population is directly measurable today. Decoding the funding block height from every
+`short_channel_id` in a 20,302-channel sample (61.1% of the public graph, block time calibrated
+at 9.91 min/block over the preceding 157,680 blocks):
+
+| Channel age | Channels | % of channels | Capacity BTC | % of capacity |
+|---|---|---|---|---|
+| Older than 1 year | 10,217 | 50.3% | 656.7 | 27.4% |
+| Older than 2 years | 6,567 | 32.3% | 344.5 | 14.4% |
+| **Older than 3 years (Phase A)** | **4,941** | **24.3%** | **152.4** | **6.4%** |
+| Older than 5 years (Phase A+B) | 2,674 | 13.2% | 33.9 | 1.4% |
+| Older than 7 years | 1,371 | 6.8% | 9.7 | 0.4% |
+
+Median age is 1.01 years. **Roughly a quarter of channels open right now have already been open
+longer than Phase A's entire window**, and one in eight longer than Phase A and B combined.
+These are channels that exist today, not a projection.
+
+Note the inversion between the two columns, because it decides how alarming this is. Channels
+older than three years are 24.3% of the count but only 6.4% of capacity; older than five years,
+13.2% of count and 1.4% of capacity. The long-lived population is the small-channel tail. So the
+honest characterisation is **many stranded channels holding little aggregate value** — on the
+order of 150 BTC in the over-three-years bucket in this sample — rather than a systemic loss.
+That is consistent with the liveness finding: the same tail of small, forgotten channels shows
+up in both measurements.
+
+The value at stake is thus modest and the design defect is not. A rule that silently makes some
+users' only exit path invalid is a problem regardless of the aggregate, and the population it
+hits is the one least equipped to notice a flag day and act on it.
+
 ### 6.3 Force-close economics
 
 Weights from BOLT-3 Appendix A (`1124 + 172·n_htlc` for anchor channels, HTLC-timeout 666);
@@ -326,6 +400,13 @@ cannot be broadcast, at any price.
 ## 7. Design requirements
 
 Stated as requirements on BIP-361 and on the PQC output type, not as a competing proposal.
+
+- **R0 — Phase A needs an explicit answer for legacy-to-legacy spends of pre-signed
+  transactions.** This is the one I would most like a response to. Either the restriction
+  carries an exception for spends whose inputs were signed before some height, or the
+  specification should say plainly that pre-signed contracts must be closed out before Phase A
+  and give the ecosystem a stated deadline to work to. What it should not do is leave the
+  question unanswered in a document whose `Specification` section is four rows long.
 
 - **R1 — A rescue proof must be attachable to an already-signed input, and there is
   currently nowhere to put it.** A Phase-B encumbrance has to be satisfiable by data added
@@ -390,7 +471,22 @@ All numbers regenerate from public APIs; no archival node required.
   omission biases the LN capacity figures downward.
 - Sweep and CPFP weights in §6.3 are derived, not spec-mandated.
 - PQ signature sizes are the NIST FIPS 204/205 parameters; the compact hash-based schemes
-  under active development would change §6.1 materially.
+  under active development would change §6.1 materially. SHRINCS at ~324 bytes and
+  OP_CHECKSHRINCS at ~580 bytes would move the throughput collapse from roughly 8–15× to
+  under 2×, which is a different argument entirely.
+- The channel sample covers 61.1% of the public graph, reached by greedy vertex cover over
+  nodes ordered by declared channel count. Coverage is therefore biased toward hub-adjacent
+  channels, which if anything *understates* the long tail that §6.2 is about.
+- My measured public capacity (3,783 BTC) is below figures reported for May 2026 (~4,900–5,600
+  BTC). The direction is consistent with the decline measured over the same period, but I have
+  not reconciled the two methodologies.
+- **Prior art I have not yet closed out**, stated so nobody has to discover it for me: I have
+  not verified a secondary-source article titled "Fixing the Lightning Network's Quantum
+  Problem: Why Layer 2 Is Harder Than Layer 1", which may cover related ground; I have not
+  searched the lightning-dev archive or GitHub discussions in `lightning/bolts`,
+  `lightningnetwork/lnd` or `ldk`, which are the most likely places this was raised if it was;
+  and I have not swept conference proceedings (FC, AFT, CCS 2026). If any of these already
+  make the argument, I would rather be told than credited.
 
 ## 10. Questions I would like answered
 

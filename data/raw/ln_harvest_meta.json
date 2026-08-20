@@ -1,0 +1,9 @@
+{
+  "harvested_tip_height": 963304,
+  "api_reported_channel_count": 33221,
+  "harvested_channel_count": 20302,
+  "coverage_pct": 61.11,
+  "node_fetches": 16296,
+  "node_universe": 17317,
+  "source": "mempool.space REST API"
+}
