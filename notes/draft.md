@@ -3,6 +3,25 @@
 *Draft for discussion. All measurements are reproducible with the scripts linked in §8.
 Measured 2026-08-20 at block height 963,304.*
 
+> **Correction in progress (2026-08-20).** I found a sampling bug in my own channel harvest
+> after publishing. The mempool.space `/channels?public_key=` endpoint returns at most 10
+> results per page and paginates via an `index` parameter; my harvester did not paginate, so it
+> collected only the first 10 channels of every node. This systematically under-sampled large
+> nodes — a hub with 1,866 channels contributed the same ten as a node with two — and capped
+> coverage at 61%.
+>
+> **Affected and currently unreliable:** the channel age distribution and the counterparty
+> liveness percentages in §6.2, the summary figures derived from them, and to a lesser degree
+> the funding-output sample in §2. A direct check of 60 stale and 60 fresh nodes also suggests
+> the 22.7% stale-counterparty figure is **overstated**: 63% of nodes with stale gossip turned
+> out to have zero open channels, meaning their declared channel counts are largely historical.
+>
+> **Not affected:** the blockspace model in §6.1, the force-close weights in §6.3, and the
+> structural arguments in §2–§5, which rest on specification text rather than on my measurements.
+>
+> A re-harvest with correct pagination is running and these sections will be revised. Treat the
+> numbers marked below as provisional until then.
+
 ## Summary
 
 BIP-360 (P2MR) and BIP-361 (Post Quantum Migration and Legacy Signature Sunset) are both
