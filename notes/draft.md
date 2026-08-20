@@ -3,24 +3,50 @@
 *Draft for discussion. All measurements are reproducible with the scripts linked in §8.
 Measured 2026-08-20 at block height 963,304.*
 
-> **Correction in progress (2026-08-20).** I found a sampling bug in my own channel harvest
-> after publishing. The mempool.space `/channels?public_key=` endpoint returns at most 10
-> results per page and paginates via an `index` parameter; my harvester did not paginate, so it
-> collected only the first 10 channels of every node. This systematically under-sampled large
-> nodes — a hub with 1,866 channels contributed the same ten as a node with two — and capped
-> coverage at 61%.
+> ## ⚠ Under revision (2026-08-20) — do not cite this version
 >
-> **Affected and currently unreliable:** the channel age distribution and the counterparty
-> liveness percentages in §6.2, the summary figures derived from them, and to a lesser degree
-> the funding-output sample in §2. A direct check of 60 stale and 60 fresh nodes also suggests
-> the 22.7% stale-counterparty figure is **overstated**: 63% of nodes with stale gossip turned
-> out to have zero open channels, meaning their declared channel counts are largely historical.
+> An adversarial review of my own novelty claims turned up one **factual error** and substantial
+> **prior art**. Both are recorded here rather than quietly patched.
 >
-> **Not affected:** the blockspace model in §6.1, the force-close weights in §6.3, and the
-> structural arguments in §2–§5, which rest on specification text rather than on my measurements.
+> **1. §2 is wrong.** I claimed that BOLT-7 gossip publishing `bitcoin_key_1`/`bitcoin_key_2`
+> destroys the knowledge asymmetry BIP-361's rescue protocols depend on. It does not. BIP-361
+> §"Rationale" grounds that asymmetry in **BIP-32 hardened derivation** — proving knowledge of a
+> parent XPriv — not in secrecy of the public key:
 >
-> A re-harvest with correct pagination is running and these sections will be revised. Treat the
-> numbers marked below as provisional until then.
+> > Any BIP-32 wallet which uses a hardened derivation step in its key-paths can thus satisfy a
+> > rescue protocol which uses BIP-32 hardened key derivation to prove knowledge of a parent
+> > XPriv which a quantum attacker would be very unlikely to know.
+>
+> The threat model *assumes* the pubkey is public — that is why the coin needs rescuing at all.
+> A quantum attacker recovers the private key via Shor, but not the parent XPriv. My inference
+> was simply mistaken. The gossip observation still defeats proposals that *do* rest on pubkey or
+> script secrecy, but that is a much narrower claim, and it is not new either — Ivezic (2026-05-12)
+> states the gossip exposure explicitly, naming the fields.
+>
+> **2. Most of the argument is prior art.** The Phase A collision was raised by Boris Nagaev in
+> the BIP-361 proposal thread on 2025-07-16, naming Lightning force-close and a vulnerable
+> destination address. The soft-fork monotonicity point was made by conduition (2025-07),
+> Riard and Wuille (2026-07). The n-of-n rescue question was asked by Nagaev and answered by
+> conduition in 2026-04.
+>
+> **3. A sampling bug in my own harvest.** The mempool.space `/channels?public_key=` endpoint
+> returns at most 10 results per page and paginates via `index`; my harvester did not paginate,
+> so it took only the first 10 channels of every node, badly under-sampling large ones. A direct
+> check also shows the 22.7% stale-counterparty figure is overstated: 63% of nodes with stale
+> gossip have no open channels at all. A corrected re-harvest now reaches 97.9% coverage and
+> §6.2 will be recomputed from it.
+>
+> **What survives**, and what a revised version should be built on:
+> - The measurement (§6.2), once recomputed over the full population.
+> - That Phase A removes **unilateral exit** — the security invariant Lightning is built on —
+>   two years before Phase B, with no compensating mechanism in that window. This is a sharper
+>   framing than "funds are lost" and I have not found it stated.
+> - That both rescue-proof carriers currently on the table — the annex (Osuntokun, 2026-04) and
+>   Wuille's annex-commitment to higher witness styles (Delving 2702, live as of 2026-08-20) —
+>   are structurally unusable for pre-signed inputs, because `annex_present` sits inside
+>   `spend_type` in the sighash preimage. This appears to be genuinely unsaid.
+>
+> The blockspace model (§6.1) and the BOLT-3 force-close weights (§6.3) are unaffected.
 
 ## Summary
 
