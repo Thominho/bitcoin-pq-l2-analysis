@@ -1,0 +1,8 @@
+{
+  "api_reported_node_count": 16442,
+  "api_reported_unannounced": 2018,
+  "harvested_node_count": 14941,
+  "coverage_pct": 90.9,
+  "bias_note": "bulk listing pokryva jen uzly s geolokaci/ISP; Tor-only uzly chybi",
+  "source": "mempool.space REST API"
+}
